@@ -6,12 +6,14 @@ use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
 use tracing::info;
 
-use crate::canonical::{CanonicalAIRequest, Intent, Payload};
+use crate::canonical::{CanonicalAIRequest, ContentPart, MessageRole};
 use crate::config::RequestReplayConfig;
 use crate::proto::{
     adapter_registry_server::{AdapterRegistry, AdapterRegistryServer},
     adapter_service_client::AdapterServiceClient,
-    AdapterCapabilities, AdapterInfo, CanonicalAiRequest, CanonicalAiResponse,
+    AdapterCapabilities, AdapterInfo, CanonicalAiRequest, CanonicalAiResponse, ContentPart as ProtoContentPart,
+    FilePart as ProtoFilePart, GenerationConstraints as ProtoGenerationConstraints, ImagePart as ProtoImagePart,
+    Message as ProtoMessage, Tool as ProtoTool, TextPart as ProtoTextPart, AudioPart as ProtoAudioPart,
     ListAdaptersRequest, ListAdaptersResponse, RegisterAdapterRequest, RegisterAdapterResponse,
 };
 
@@ -124,22 +126,76 @@ impl AdapterRegistry for AdapterRegistrySvc {
 }
 
 fn to_proto(req: CanonicalAIRequest) -> CanonicalAiRequest {
-    let intent: i32 = match req.intent {
-        Intent::IntentUnspecified => 0,
-        Intent::IntentChat => 1,
-        Intent::IntentEmbed => 2,
-        Intent::IntentTool => 3,
+    let messages = req
+        .messages
+        .into_iter()
+        .map(|m| ProtoMessage {
+            role: match m.role {
+                MessageRole::System => 1,
+                MessageRole::User => 2,
+                MessageRole::Assistant => 3,
+                MessageRole::Tool => 4,
+            },
+            content: m
+                .content
+                .into_iter()
+                .map(|p| match p {
+                    ContentPart::Text { text } => ProtoContentPart {
+                        part: Some(crate::proto::content_part::Part::Text(ProtoTextPart { text })),
+                    },
+                    ContentPart::Image { url } => ProtoContentPart {
+                        part: Some(crate::proto::content_part::Part::Image(ProtoImagePart { url })),
+                    },
+                    ContentPart::Audio { url } => ProtoContentPart {
+                        part: Some(crate::proto::content_part::Part::Audio(ProtoAudioPart { url })),
+                    },
+                    ContentPart::File { url, mime_type } => ProtoContentPart {
+                        part: Some(crate::proto::content_part::Part::File(ProtoFilePart { url, mime_type })),
+                    },
+                })
+                .collect(),
+            name: m.name.unwrap_or_default(),
+            tool_call_id: m.tool_call_id.unwrap_or_default(),
+        })
+        .collect();
+
+    let tools = req
+        .tools
+        .into_iter()
+        .map(|t| ProtoTool {
+            name: t.name,
+            description: t.description.unwrap_or_default(),
+            parameters_json_schema: t
+                .parameters_json_schema
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+            strict: t.strict,
+        })
+        .collect();
+
+    let constraints = ProtoGenerationConstraints {
+        max_tokens: req.constraints.max_tokens.unwrap_or_default(),
+        temperature: req.constraints.temperature.unwrap_or_default(),
+        top_p: req.constraints.top_p.unwrap_or_default(),
+        top_k: req.constraints.top_k.unwrap_or_default(),
+        stop_sequences: req.constraints.stop_sequences,
+        presence_penalty: req.constraints.presence_penalty.unwrap_or_default(),
+        frequency_penalty: req.constraints.frequency_penalty.unwrap_or_default(),
+        reasoning_effort: req.constraints.reasoning_effort.unwrap_or_default(),
+        stream: req.constraints.stream,
     };
-    let payload = match req.payload {
-        Payload::Text { text } => Some(crate::proto::canonical_ai_request::Payload::Text(crate::proto::TextPayload { text })),
-        Payload::Json { json } => Some(crate::proto::canonical_ai_request::Payload::Json(crate::proto::JsonPayload { json: json.to_string() })),
-    };
+
     CanonicalAiRequest {
         request_id: req.request_id.to_string(),
-        agent_id: req.agent_id,
-        intent,
-        constraints: req.constraints.into_iter().collect(),
-        payload,
+        agent_id: req.agent_id.unwrap_or_default(),
+        session_id: req.session_id.unwrap_or_default(),
+        messages,
+        tools,
+        tool_choice: req.tool_choice.unwrap_or_default(),
+        constraints: Some(constraints),
+        preferred_model: req.preferred_model.unwrap_or_default(),
+        metadata: req.metadata.into_iter().collect(),
+        response_format_json_schema: req.response_format.map(|v| v.to_string()).unwrap_or_default(),
     }
 }
 

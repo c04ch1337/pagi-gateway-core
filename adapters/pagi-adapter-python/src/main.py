@@ -5,7 +5,7 @@ import logging
 import grpc
 
 from .config import load_config
-from .middleware import model_route, token_count
+from .middleware import iter_text_from_messages, model_route, token_count_messages
 
 
 log = logging.getLogger("pagi.adapter.python")
@@ -31,18 +31,38 @@ class AdapterService:
     async def Process(self, request, context):  # noqa: N802 (grpc style)
         agent_pb2, _ = _import_contracts()
 
-        text = ""
-        if request.HasField("text"):
-            text = request.text.text
+        texts = iter_text_from_messages(request.messages)
+
+        preferred_model = request.preferred_model or None
+        chosen_model = model_route(preferred_model, len(request.tools))
 
         out = {
             "request_id": request.request_id,
-            "agent_id": request.agent_id,
-            "intent": int(request.intent),
-            "model": model_route(int(request.intent)),
-            "token_count": token_count(text) if text else 0,
-            "constraints": dict(request.constraints),
-            "echo": {"text": text} if text else None,
+            "agent_id": request.agent_id or None,
+            "session_id": request.session_id or None,
+            "model": chosen_model,
+            "token_count": token_count_messages(request.messages),
+            "constraints": {
+                "max_tokens": request.constraints.max_tokens,
+                "temperature": request.constraints.temperature,
+                "top_p": request.constraints.top_p,
+                "top_k": request.constraints.top_k,
+                "stop_sequences": list(request.constraints.stop_sequences),
+                "presence_penalty": request.constraints.presence_penalty,
+                "frequency_penalty": request.constraints.frequency_penalty,
+                "reasoning_effort": request.constraints.reasoning_effort,
+                "stream": request.constraints.stream,
+            },
+            "tools": [
+                {
+                    "name": t.name,
+                    "description": t.description or None,
+                    "strict": bool(t.strict),
+                }
+                for t in request.tools
+            ],
+            "metadata": dict(request.metadata),
+            "echo_text": "\n".join(texts) if texts else None,
         }
 
         return agent_pb2.CanonicalAIResponse(
@@ -95,4 +115,3 @@ async def serve() -> None:
 
 if __name__ == "__main__":
     asyncio.run(serve())
-

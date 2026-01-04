@@ -1,7 +1,7 @@
 use async_graphql::{Context, EmptySubscription, Object, Request as GqlRequest, Schema, Variables};
 use hyper::{Body, Method, Request, Response, StatusCode};
 
-use crate::canonical::{CanonicalAIRequest, Intent, Payload};
+use crate::canonical::CanonicalAIRequest;
 use crate::registry::AdapterRegistryState;
 
 pub type SchemaType = Schema<QueryRoot, MutationRoot, EmptySubscription>;
@@ -82,9 +82,8 @@ pub struct MutationRoot;
 impl MutationRoot {
     async fn ai_call(&self, ctx: &Context<'_>, agent_id: String, text: String) -> async_graphql::Result<String> {
         let registry = ctx.data::<AdapterRegistryState>()?;
-        let req = CanonicalAIRequest::new(agent_id, Intent::IntentChat, Payload::Text { text });
+        let req = CanonicalAIRequest::chat_text(Some(agent_id), text);
         let resp = registry.forward(req).await.map_err(|e| async_graphql::Error::new(e.to_string()))?;
         Ok(resp.json)
     }
 }
-
