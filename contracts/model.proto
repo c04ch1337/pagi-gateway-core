@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package pagi.v1;
+
+option go_package = "github.com/pagi-ai/pagi/contracts/gen/go/pagiv1;pagiv1";
+option java_package = "com.pagi.contracts.v1";
+option java_multiple_files = true;
+
+// Reserved for future model catalog and routing extensions.
+message ModelRef {
+  string provider = 1; // e.g. openai, anthropic, local
+  string name = 2;     // e.g. gpt-4o-mini
+  string version = 3;
+}
+

@@ -1,0 +1,19 @@
+# OPTIONAL: containerized development (not part of the core build flow)
+#
+# This file is intentionally not wired into any scripts/CI. Use only if you opt in.
+#
+# docker build -f deployment/OPTIONAL_Dockerfile .
+
+FROM rust:1.76 as core
+WORKDIR /src
+COPY pagi-gateway-core ./pagi-gateway-core
+RUN cd pagi-gateway-core && cargo build --release
+
+FROM python:3.11-slim
+WORKDIR /app
+COPY --from=core /src/pagi-gateway-core/target/release/pagi-gateway-core /usr/local/bin/pagi-gateway-core
+COPY adapters/pagi-adapter-python ./adapters/pagi-adapter-python
+RUN pip install -r adapters/pagi-adapter-python/requirements.txt
+EXPOSE 8080 50051 6000
+CMD ["/usr/local/bin/pagi-gateway-core"]
+

@@ -1,0 +1,12 @@
+# OPTIONAL: containerized dev (opt-in)
+version: "3.9"
+services:
+  core:
+    build:
+      context: ..
+      dockerfile: deployment/OPTIONAL_Dockerfile
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+      - "6000:6000"
+

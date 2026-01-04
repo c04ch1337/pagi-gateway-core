@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package pagi.v1;
+
+option go_package = "github.com/pagi-ai/pagi/contracts/gen/go/pagiv1;pagiv1";
+option java_package = "com.pagi.contracts.v1";
+option java_multiple_files = true;
+
+// Reserved for memory APIs (vector store, event sourcing, etc.).
+message MemoryKey {
+  string namespace = 1;
+  string key = 2;
+}
+

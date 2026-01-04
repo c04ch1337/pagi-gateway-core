@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package pagi.v1;
+
+option go_package = "github.com/pagi-ai/pagi/contracts/gen/go/pagiv1;pagiv1";
+option java_package = "com.pagi.contracts.v1";
+option java_multiple_files = true;
+
+// Intent is the primary routing discriminator for AI gateway calls.
+enum Intent {
+  INTENT_UNSPECIFIED = 0;
+  INTENT_CHAT = 1;
+  INTENT_EMBED = 2;
+  INTENT_TOOL = 3;
+}
+
+message TextPayload {
+  string text = 1;
+}
+
+message JsonPayload {
+  string json = 1;
+}
+
+// Canonical request used by the Rust core to avoid N^2 protocol/adaptor translation.
+message CanonicalAIRequest {
+  string request_id = 1;
+  string agent_id = 2;
+  Intent intent = 3;
+  map<string, string> constraints = 4;
+  oneof payload {
+    TextPayload text = 10;
+    JsonPayload json = 11;
+  }
+}
+
+message CanonicalAIResponse {
+  string request_id = 1;
+  string adapter_id = 2;
+  string json = 3;
+}
+
+message AdapterCapabilities {
+  bool streaming = 1;
+  bool token_count = 2;
+  bool model_route = 3;
+  bool embed_cache = 4;
+}
+
+message RegisterAdapterRequest {
+  string adapter_id = 1;
+  string endpoint = 2; // e.g. http://127.0.0.1:6000
+  AdapterCapabilities capabilities = 3;
+  string version = 4;
+}
+
+message RegisterAdapterResponse {
+  bool ok = 1;
+}
+
+message ListAdaptersRequest {}
+
+message AdapterInfo {
+  string adapter_id = 1;
+  string endpoint = 2;
+  AdapterCapabilities capabilities = 3;
+  string version = 4;
+}
+
+message ListAdaptersResponse {
+  repeated AdapterInfo adapters = 1;
+}
+
+service AdapterRegistry {
+  rpc Register(RegisterAdapterRequest) returns (RegisterAdapterResponse);
+  rpc List(ListAdaptersRequest) returns (ListAdaptersResponse);
+}
+
+service AdapterService {
+  rpc Process(CanonicalAIRequest) returns (CanonicalAIResponse);
+}
+

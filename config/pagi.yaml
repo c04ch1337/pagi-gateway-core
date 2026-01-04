@@ -1,0 +1,20 @@
+version: v1alpha1
+
+core:
+  bind_http: "127.0.0.1:8080"
+  bind_grpc: "127.0.0.1:50051"
+  request_replay:
+    enabled: true
+    path: "./replay.log"
+  observability:
+    metrics_path: "/metrics"
+
+adapters:
+  - id: "python"
+    kind: "grpc"
+    endpoint: "http://127.0.0.1:6000"
+    capabilities:
+      token_count: true
+      model_route: true
+      embed_cache: false
+

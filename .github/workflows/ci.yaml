@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust fmt
+        run: cd pagi-gateway-core && cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cd pagi-gateway-core && cargo clippy --all-targets -- -D warnings
+
+      - name: Rust test
+        run: cd pagi-gateway-core && cargo test
+
+  python-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          cd adapters/pagi-adapter-python
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate python stubs
+        run: bash tools/generate-protos.sh
+
+      - name: Pytest
+        run: cd adapters/pagi-adapter-python && pytest -q
+
