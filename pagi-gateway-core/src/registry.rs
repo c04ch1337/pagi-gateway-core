@@ -48,11 +48,19 @@ impl AdapterRegistryState {
         self.maybe_replay(&req).await;
 
         let adapters = self.inner.adapters.read().await;
-        let (adapter_id, adapter) = adapters
-            .iter()
-            .next()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .context("no adapters registered")?;
+        let selected = req
+            .metadata
+            .get("adapter_id")
+            .and_then(|id| adapters.get(id).map(|info| (id.clone(), info.clone())));
+
+        let (adapter_id, adapter) = match selected {
+            Some(v) => v,
+            None => adapters
+                .iter()
+                .next()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .context("no adapters registered")?,
+        };
 
         drop(adapters);
 

@@ -20,16 +20,24 @@ PROTO_FILES=(
 )
 
 ### Python
-PY_OUT="$ROOT_DIR/adapters/pagi-adapter-python/src/pagi_contracts"
-mkdir -p "$PY_OUT"
-if "$PYTHON_BIN" -c "import grpc_tools" >/dev/null 2>&1; then
-  echo "[pagi] generating python stubs -> $PY_OUT"
+gen_python() {
+  local out_dir="$1"
+  mkdir -p "$out_dir"
+  echo "[pagi] generating python stubs -> $out_dir"
   "$PYTHON_BIN" -m grpc_tools.protoc \
     -I"$CONTRACTS_DIR" \
-    --python_out="$PY_OUT" \
-    --grpc_python_out="$PY_OUT" \
+    --python_out="$out_dir" \
+    --grpc_python_out="$out_dir" \
     "${PROTO_FILES[@]}"
-  touch "$PY_OUT/__init__.py"
+  touch "$out_dir/__init__.py"
+}
+
+if "$PYTHON_BIN" -c "import grpc_tools" >/dev/null 2>&1; then
+  gen_python "$ROOT_DIR/adapters/pagi-adapter-python/src/pagi_contracts"
+  # Provider adapters (optional)
+  if [[ -d "$ROOT_DIR/adapters/pagi-provider-openai" ]]; then
+    gen_python "$ROOT_DIR/adapters/pagi-provider-openai/src/pagi_contracts"
+  fi
 else
   echo "[pagi] skip python stub generation (missing grpcio-tools)"
 fi
