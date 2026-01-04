@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use anyhow::Context;
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
 use tracing::info;
@@ -48,26 +47,55 @@ impl AdapterRegistryState {
         self.maybe_replay(&req).await;
 
         let adapters = self.inner.adapters.read().await;
-        let selected = req
-            .metadata
-            .get("adapter_id")
-            .and_then(|id| adapters.get(id).map(|info| (id.clone(), info.clone())));
+        let mut candidates: Vec<(String, AdapterInfo)> = Vec::new();
 
-        let (adapter_id, adapter) = match selected {
-            Some(v) => v,
-            None => adapters
-                .iter()
-                .next()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .context("no adapters registered")?,
-        };
+        if let Some(id) = req.metadata.get("adapter_id") {
+            if let Some(info) = adapters.get(id) {
+                candidates.push((id.clone(), info.clone()));
+            }
+        } else {
+            // Default routing policy:
+            // 1) OpenRouter if registered
+            // 2) Ollama failover if registered
+            // 3) otherwise first-registered adapter
+            if let Some(info) = adapters.get("openrouter") {
+                candidates.push(("openrouter".to_string(), info.clone()));
+            }
+            if let Some(info) = adapters.get("ollama") {
+                candidates.push(("ollama".to_string(), info.clone()));
+            }
+            if let Some((k, v)) = adapters.iter().next() {
+                // Avoid duplicates.
+                if !candidates.iter().any(|(id, _)| id == k) {
+                    candidates.push((k.clone(), v.clone()));
+                }
+            }
+        }
 
         drop(adapters);
 
-        let mut client = AdapterServiceClient::connect(adapter.endpoint.clone()).await?;
         let proto_req: CanonicalAiRequest = to_proto(req);
-        let resp: CanonicalAiResponse = client.process(proto_req).await?.into_inner();
-        Ok(ForwardResponse { request_id: resp.request_id, adapter_id, json: resp.json })
+        let mut last_err: Option<anyhow::Error> = None;
+
+        for (adapter_id, adapter) in candidates {
+            let endpoint = adapter.endpoint.clone();
+            let attempt = async {
+                let mut client = AdapterServiceClient::connect(endpoint).await?;
+                let resp: CanonicalAiResponse = client.process(proto_req.clone()).await?.into_inner();
+                Ok::<_, anyhow::Error>(ForwardResponse { request_id: resp.request_id, adapter_id, json: resp.json })
+            }
+            .await;
+
+            match attempt {
+                Ok(v) => return Ok(v),
+                Err(e) => {
+                    last_err = Some(e);
+                    continue;
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("no adapters registered")))
     }
 
     async fn maybe_replay(&self, req: &CanonicalAIRequest) {

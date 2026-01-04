@@ -17,3 +17,17 @@ adapters:
       token_count: true
       model_route: true
       embed_cache: false
+
+providers:
+  openrouter:
+    enabled: true
+    api_key_env: "OPENROUTER_API_KEY"
+    default: true
+    base_url: "https://openrouter.ai/api/v1"
+  ollama:
+    enabled: true
+    base_url: "http://127.0.0.1:11434/v1"
+    failover: true
+    models_mapping:
+      "anthropic/claude-3.5-sonnet": "llama3.2:70b"
+      "openai/gpt-4o-mini": "llama3.2:8b"

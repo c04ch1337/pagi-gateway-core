@@ -38,6 +38,12 @@ if "$PYTHON_BIN" -c "import grpc_tools" >/dev/null 2>&1; then
   if [[ -d "$ROOT_DIR/adapters/pagi-provider-openai" ]]; then
     gen_python "$ROOT_DIR/adapters/pagi-provider-openai/src/pagi_contracts"
   fi
+  if [[ -d "$ROOT_DIR/adapters/pagi-provider-openrouter" ]]; then
+    gen_python "$ROOT_DIR/adapters/pagi-provider-openrouter/src/pagi_contracts"
+  fi
+  if [[ -d "$ROOT_DIR/adapters/pagi-provider-ollama" ]]; then
+    gen_python "$ROOT_DIR/adapters/pagi-provider-ollama/src/pagi_contracts"
+  fi
 else
   echo "[pagi] skip python stub generation (missing grpcio-tools)"
 fi

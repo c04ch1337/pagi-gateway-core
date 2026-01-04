@@ -190,6 +190,15 @@ pub async fn handle_call(
         RestIngressRequest::V0(v) => CanonicalAIRequest::chat_text(Some(v.agent_id), v.payload),
     };
 
+    // Convenience: allow clients to specify a preferred provider without needing to know
+    // the internal routing key name.
+    let mut canonical = canonical;
+    if !canonical.metadata.contains_key("adapter_id") {
+        if let Some(p) = canonical.metadata.get("preferred_provider").cloned() {
+            canonical.metadata.insert("adapter_id".to_string(), p);
+        }
+    }
+
     // If client sent an empty messages list, treat as invalid.
     if canonical.messages.is_empty() {
         metrics.inc_requests("rest", "400");
