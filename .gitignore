@@ -28,3 +28,7 @@
 
 ### OS
 .DS_Store
+
+### Runtime artifacts
+replay.log
+**/replay.log

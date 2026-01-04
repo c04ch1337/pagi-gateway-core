@@ -5,7 +5,7 @@ import logging
 import grpc
 
 from .config import load_config
-from .middleware import iter_text_from_messages, model_route, token_count_messages
+from .middleware import iter_text_from_messages, model_route, route_to_model, token_count_messages
 
 
 log = logging.getLogger("pagi.adapter.python")
@@ -34,7 +34,7 @@ class AdapterService:
         texts = iter_text_from_messages(request.messages)
 
         preferred_model = request.preferred_model or None
-        chosen_model = model_route(preferred_model, len(request.tools))
+        chosen_model = route_to_model(request)
 
         out = {
             "request_id": request.request_id,
