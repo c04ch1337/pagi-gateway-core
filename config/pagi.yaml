@@ -1,7 +1,7 @@
 version: v1alpha1
 
 core:
-  bind_http: "127.0.0.1:8080"
+  bind_http: "127.0.0.1:8282"
   bind_grpc: "127.0.0.1:50051"
   request_replay:
     enabled: true
@@ -17,4 +17,3 @@ adapters:
       token_count: true
       model_route: true
       embed_cache: false
-

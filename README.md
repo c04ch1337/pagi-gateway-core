@@ -70,7 +70,7 @@ python -m src.main
 4) Call the REST ingress endpoint:
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8080/v1/ai:call \
+curl -sS -X POST http://127.0.0.1:8282/v1/ai:call \
   -H 'content-type: application/json' \
   -d '{"agent_id":"demo","intent":"INTENT_CHAT","payload":{"text":"hello"}}'
 ```
