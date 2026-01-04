@@ -16,7 +16,9 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let config_path = std::env::var("PAGI_CONFIG").unwrap_or_else(|_| "../config/pagi.yaml".to_string());
+    let config_path = parse_config_path_from_args()
+        .or_else(|| std::env::var("PAGI_CONFIG").ok())
+        .unwrap_or_else(|| "../config/pagi.yaml".to_string());
     let cfg = Config::from_path(&config_path).context("loading config")?;
     info!(%config_path, "loaded config");
 
@@ -75,7 +77,7 @@ async fn handle_http(
     match (req.method().as_str(), req.uri().path()) {
         ("GET", "/healthz") => Ok(Response::new(Body::from("ok"))),
         ("GET", "/metrics") => Ok(metrics.render()),
-        ("POST", "/v1/ai:call") => rest::handle_call(req, registry, metrics).await,
+        ("POST", "/v1/ai:call") | ("POST", "/api/call") => rest::handle_call(req, registry, metrics).await,
         ("GET", "/graphql") | ("POST", "/graphql") => graphql::handle(req, graphql_schema).await,
         _ => {
             let mut r = Response::new(Body::from("not found"));
@@ -83,4 +85,17 @@ async fn handle_http(
             Ok(r)
         }
     }
+}
+
+fn parse_config_path_from_args() -> Option<String> {
+    let mut args = std::env::args().skip(1);
+    while let Some(a) = args.next() {
+        if a == "--config" {
+            return args.next();
+        }
+        if let Some(v) = a.strip_prefix("--config=") {
+            return Some(v.to_string());
+        }
+    }
+    None
 }

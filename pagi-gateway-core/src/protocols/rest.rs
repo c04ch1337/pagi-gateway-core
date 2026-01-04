@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::canonical::{CanonicalAIRequest, GenerationConstraints, Message, Tool};
+use crate::canonical::{CanonicalAIRequest, ContentPart, GenerationConstraints, Message, MessageRole, Tool};
 use crate::middleware::{auth, rate_limit::IpRateLimiter};
 use crate::middleware::observability::Metrics;
 use crate::registry::AdapterRegistryState;
@@ -15,8 +15,9 @@ use crate::registry::AdapterRegistryState;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum RestIngressRequest {
-    V2(CanonicalIngressRequest),
+    V0(LegacyV0Request),
     V1(LegacyV1Request),
+    V2(CanonicalIngressRequest),
 }
 
 /// Canonical-ish request without requiring client to provide request_id.
@@ -29,7 +30,7 @@ pub struct CanonicalIngressRequest {
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
-    pub messages: Vec<Message>,
+    pub messages: Vec<RestMessageInput>,
     #[serde(default)]
     pub tools: Vec<Tool>,
     #[serde(default)]
@@ -45,10 +46,52 @@ pub struct CanonicalIngressRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RestMessageInput {
+    pub role: MessageRole,
+    #[serde(default)]
+    pub content: Vec<RestContentPartInput>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum RestContentPartInput {
+    // Canonical wire form: {"type":"text","text":"..."}
+    Canonical(ContentPart),
+    // Shorthand: {"text":"..."}
+    Text { text: String },
+    // Shorthand: {"image": {"url":"..."}}
+    Image { image: UrlOnly },
+    Audio { audio: UrlOnly },
+    File { file: FileOnly },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UrlOnly {
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FileOnly {
+    pub url: String,
+    pub mime_type: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct LegacyV1Request {
     pub agent_id: String,
     pub intent: String,
     pub payload: LegacyPayload,
+}
+
+/// Extra-legacy request shape (single string payload, no explicit intent).
+#[derive(Debug, Deserialize)]
+pub struct LegacyV0Request {
+    pub agent_id: String,
+    pub payload: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,7 +150,26 @@ pub async fn handle_call(
             }
             req.agent_id = v.agent_id;
             req.session_id = v.session_id;
-            req.messages = v.messages;
+            req.messages = v
+                .messages
+                .into_iter()
+                .map(|m| Message {
+                    role: m.role,
+                    content: m
+                        .content
+                        .into_iter()
+                        .map(|p| match p {
+                            RestContentPartInput::Canonical(p) => p,
+                            RestContentPartInput::Text { text } => ContentPart::Text { text },
+                            RestContentPartInput::Image { image } => ContentPart::Image { url: image.url },
+                            RestContentPartInput::Audio { audio } => ContentPart::Audio { url: audio.url },
+                            RestContentPartInput::File { file } => ContentPart::File { url: file.url, mime_type: file.mime_type },
+                        })
+                        .collect(),
+                    name: m.name,
+                    tool_call_id: m.tool_call_id,
+                })
+                .collect();
             req.tools = v.tools;
             req.tool_choice = v.tool_choice;
             req.constraints = v.constraints.unwrap_or_default();
@@ -125,6 +187,7 @@ pub async fn handle_call(
             req.metadata.insert("legacy_intent".to_string(), v.intent);
             req
         }
+        RestIngressRequest::V0(v) => CanonicalAIRequest::chat_text(Some(v.agent_id), v.payload),
     };
 
     // If client sent an empty messages list, treat as invalid.
@@ -149,6 +212,34 @@ pub async fn handle_call(
 
     let out = RestCallResponse { request_id: resp.request_id, adapter_id: resp.adapter_id, json: resp.json };
     Ok(json(StatusCode::OK, &out))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_legacy_v0() {
+        let j = r#"{"agent_id":"a","payload":"hello"}"#;
+        let parsed: RestIngressRequest = serde_json::from_str(j).unwrap();
+        match parsed {
+            RestIngressRequest::V0(v) => assert_eq!(v.payload, "hello"),
+            _ => panic!("expected v0"),
+        }
+    }
+
+    #[test]
+    fn parses_content_part_shorthand() {
+        let j = r#"{
+          "messages": [{
+            "role": "user",
+            "content": [{"text":"hi"}, {"image": {"url": "https://e/x.png"}}]
+          }]
+        }"#;
+        let parsed: CanonicalIngressRequest = serde_json::from_str(j).unwrap();
+        assert_eq!(parsed.messages.len(), 1);
+        assert_eq!(parsed.messages[0].content.len(), 2);
+    }
 }
 
 fn json<T: serde::Serialize>(status: StatusCode, v: &T) -> Response<Body> {
