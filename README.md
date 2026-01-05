@@ -20,6 +20,7 @@ This repository ships a runnable MVP with a Rust core and multiple (optional) ad
 ## Table of contents
 
 - [Features](#features)
+- [Use cases](#use-cases)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Configuration](#configuration)
@@ -44,6 +45,15 @@ This repository ships a runnable MVP with a Rust core and multiple (optional) ad
 - ✅ **Bare-metal first**: compile/run with `cargo`, `python`, etc.
 - 🧩 Extensible skeletons for Go/Java adapters
 - 🧪 Tests: Rust unit tests + Python pytest skeleton
+
+## Use cases
+
+- **Polyglot AI gateway for existing backends**: keep app code in Node/Python/Go/Java while centralizing auth, rate limits, observability, and model access behind a single ingress.
+- **Canonical request “lingua franca”**: support multiple inbound protocols (REST/GraphQL/gRPC/WS) without N² translation complexity between each protocol and each adapter.
+- **Provider portability / model routing**: swap providers (e.g. OpenAI/OpenRouter/Ollama) or route by policy from a single place (adapter/middleware), without changing client request shapes.
+- **Enterprise boundary + compliance**: enforce consistent request logging, replay, and policy controls at the gateway boundary before any provider call.
+- **Adapter-based extensibility**: implement organization-specific middleware (PII redaction, guardrails, tool permissioning, caching) as sidecars that can be versioned and deployed independently.
+- **Experimentation + replay**: capture canonical requests for offline evaluation, regression testing, and deterministic reprocessing.
 
 ## Installation
 
